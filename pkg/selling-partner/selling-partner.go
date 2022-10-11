@@ -119,26 +119,33 @@ func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataToken
 		"restrictedResources": rdtPaths,
 	})
 
-	resp, err := http.Post(
-		"https://sellingpartnerapi-eu.amazon.com/tokens/2021-03-01/restrictedDataToken",
-		"application/json",
-		bytes.NewBuffer(reqBody))
-
+	req, err := http.NewRequest("POST", "https://sellingpartnerapi-eu.amazon.com/tokens/2021-03-01/restrictedDataToken", bytes.NewBuffer(reqBody))
 	if err != nil {
 		return errors.New("RefreshRestrictedDataToken call failed with error " + err.Error())
+	}
+
+	if err := s.SignRequest(req); err != nil {
+		return err
+	}
+
+	client := http.Client{}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
 	}
 
 	defer resp.Body.Close()
 
 	respBodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.New("RefreshToken read response with error " + err.Error())
+		return errors.New("RefreshRestrictedDataToken read response with error " + err.Error())
 	}
 
 	rdtRsp := &RestrictedDataTokenResponse{}
 
 	if err = json.Unmarshal(respBodyBytes, rdtRsp); err != nil {
-		return errors.New("RefreshToken response parse failed. Body: " + string(respBodyBytes))
+		return errors.New("RefreshRestrictedDataToken response parse failed. Body: " + string(respBodyBytes))
 	}
 
 	if rdtRsp.RestrictedDataToken != "" {
