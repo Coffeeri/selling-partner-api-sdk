@@ -30,13 +30,14 @@ type AccessTokenResponse struct {
 }
 
 type Config struct {
-	ClientID     string //SP-API
-	ClientSecret string //SP-API
-	RefreshToken string //
-	AccessKeyID  string //AWS IAM User Access Key Id
-	SecretKey    string //AWS IAM User Secret Key
-	Region       string //AWS Region
-	RoleArn      string //AWS IAM Role ARN
+	ClientID               string //SP-API
+	ClientSecret           string //SP-API
+	RefreshToken           string //
+	UseRestrictedDataToken bool
+	AccessKeyID            string //AWS IAM User Access Key Id
+	SecretKey              string //AWS IAM User Secret Key
+	Region                 string //AWS Region
+	RoleArn                string //AWS IAM Role ARN
 }
 
 func (o Config) IsValid() (bool, error) {
@@ -64,13 +65,19 @@ func (o Config) IsValid() (bool, error) {
 	return true, nil
 }
 
+type restrictedDataTokenMetaData struct {
+	path         string
+	dataElements []string
+}
+
 type SellingPartner struct {
-	cfg               *Config
-	accessToken       string
-	accessTokenExpiry time.Time
-	aws4Signer        *v4.Signer
-	awsStsCredentials *sts.Credentials
-	awsSession        *session.Session
+	cfg                 *Config
+	accessToken         string
+	accessTokenExpiry   time.Time
+	restrictedDataToken *restrictedDataTokenMetaData
+	aws4Signer          *v4.Signer
+	awsStsCredentials   *sts.Credentials
+	awsSession          *session.Session
 }
 
 func NewSellingPartner(cfg *Config) (*SellingPartner, error) {
@@ -93,7 +100,61 @@ func NewSellingPartner(cfg *Config) (*SellingPartner, error) {
 	return sp, nil
 }
 
+type RestrictedDataTokenResponse struct {
+	RestrictedDataToken string `json:"restrictedDataToken"`
+	ExpiresIn           int    `json:"expiresIn"`
+}
+
+type RestrictedDataTokenRequestPath struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+}
+
+func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataTokenRequestPath) error {
+	var rdtPaths []RestrictedDataTokenRequestPath
+	for _, path := range paths {
+		rdtPaths = append(rdtPaths, path)
+	}
+	reqBody, _ := json.Marshal(map[string][]RestrictedDataTokenRequestPath{
+		"restrictedResources": rdtPaths,
+	})
+
+	resp, err := http.Post(
+		"https://sellingpartnerapi-eu.amazon.com/tokens/2021-03-01/restrictedDataToken",
+		"application/json",
+		bytes.NewBuffer(reqBody))
+
+	if err != nil {
+		return errors.New("RefreshRestrictedDataToken call failed with error " + err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	respBodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errors.New("RefreshToken read response with error " + err.Error())
+	}
+
+	rdtRsp := &RestrictedDataTokenResponse{}
+
+	if err = json.Unmarshal(respBodyBytes, rdtRsp); err != nil {
+		return errors.New("RefreshToken response parse failed. Body: " + string(respBodyBytes))
+	}
+
+	if rdtRsp.RestrictedDataToken != "" {
+		s.accessToken = rdtRsp.RestrictedDataToken
+		s.accessTokenExpiry = time.Now().UTC().Add(time.Duration(rdtRsp.ExpiresIn) * time.Second) //set expiration time
+	} else {
+		return errors.New(fmt.Sprintf("RestrictedDataTokenResponse failed with unknown reason. Body: %s", string(respBodyBytes)))
+	}
+
+	return nil
+}
+
 func (s *SellingPartner) RefreshToken() error {
+	//if s.cfg.UseRestrictedDataToken {
+	//	return  s.RefreshRestrictedDataToken()
+	//}
 
 	reqBody, _ := json.Marshal(map[string]string{
 		"grant_type":    "refresh_token",
