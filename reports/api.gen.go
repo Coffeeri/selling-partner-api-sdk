@@ -463,7 +463,7 @@ func NewGetReportDocumentRequest(endpoint string, reportDocumentId string) (*htt
 		return nil, err
 	}
 
-	basePath := fmt.Sprintf("/reports/2020-09-04/documents/%s", pathParam0)
+	basePath := fmt.Sprintf("/reports/2021-06-30/documents/%s", pathParam0)
 	if basePath[0] == '/' {
 		basePath = basePath[1:]
 	}
