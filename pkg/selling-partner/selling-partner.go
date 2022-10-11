@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"time"
@@ -113,18 +112,25 @@ type RestrictedDataTokenResponse struct {
 }
 
 type RestrictedDataTokenRequestPath struct {
-	Method string `json:"method"`
-	Path   string `json:"path"`
+	Method       string   `json:"method"`
+	Path         string   `json:"path"`
+	DataElements []string `json:"dataElements"`
 }
 
 func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataTokenRequestPath) error {
 	var rdtPaths []RestrictedDataTokenRequestPath
 	for _, path := range paths {
+		if len(path.DataElements) == 0 {
+			path.DataElements = []string{"buyerInfo", "shippingAddress", "buyerTaxInformation"}
+		}
 		rdtPaths = append(rdtPaths, path)
 	}
-	reqBody, _ := json.Marshal(map[string][]RestrictedDataTokenRequestPath{
+	reqBody, err := json.Marshal(map[string][]RestrictedDataTokenRequestPath{
 		"restrictedResources": rdtPaths,
 	})
+	if err != nil {
+		return err
+	}
 
 	req, err := http.NewRequest("POST", "https://sellingpartnerapi-eu.amazon.com/tokens/2021-03-01/restrictedDataToken", bytes.NewBuffer(reqBody))
 	if err != nil {
@@ -144,7 +150,7 @@ func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataToken
 
 	defer resp.Body.Close()
 
-	respBodyBytes, err := ioutil.ReadAll(resp.Body)
+	respBodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.New("RefreshRestrictedDataToken read response with error " + err.Error())
 	}
@@ -159,10 +165,10 @@ func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataToken
 		s.accessToken = rdtRsp.RestrictedDataToken
 		s.accessTokenExpiry = time.Now().UTC().Add(time.Duration(rdtRsp.ExpiresIn) * time.Second) //set expiration time
 	} else if rdtRsp.Errors[0].Code != "" {
-		return fmt.Errorf("RefreshToken failed with code %s, Message %s, Details %s",
-			rdtRsp.Errors[0].Code, rdtRsp.Errors[0].Message, rdtRsp.Errors[0].Details)
+		return fmt.Errorf("RefreshToken failed with code %s, Message %s, Details %s, request body %s",
+			rdtRsp.Errors[0].Code, rdtRsp.Errors[0].Message, rdtRsp.Errors[0].Details, req.Body)
 	} else {
-		return fmt.Errorf("RestrictedDataTokenResponse failed with unknown reason. Body: %s", string(respBodyBytes))
+		return fmt.Errorf("RestrictedDataTokenResponse failed with unknown reason. Body: %s, request body %s", string(respBodyBytes), req.Body)
 	}
 
 	return nil
@@ -187,7 +193,7 @@ func (s *SellingPartner) RefreshToken() error {
 
 	defer resp.Body.Close()
 
-	respBodyBytes, err := ioutil.ReadAll(resp.Body)
+	respBodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.New("RefreshToken read response with error " + err.Error())
 	}
@@ -268,11 +274,11 @@ func (s *SellingPartner) SignRequest(r *http.Request) error {
 
 	var body io.ReadSeeker
 	if r.Body != nil {
-		payload, err := ioutil.ReadAll(r.Body)
+		payload, err := io.ReadAll(r.Body)
 		if err != nil {
 			return err
 		}
-		r.Body = ioutil.NopCloser(bytes.NewReader(payload))
+		r.Body = io.NopCloser(bytes.NewReader(payload))
 		body = bytes.NewReader(payload)
 	}
 
