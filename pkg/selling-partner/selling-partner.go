@@ -165,10 +165,10 @@ func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataToken
 		s.accessToken = rdtRsp.RestrictedDataToken
 		s.accessTokenExpiry = time.Now().UTC().Add(time.Duration(rdtRsp.ExpiresIn) * time.Second) //set expiration time
 	} else if rdtRsp.Errors[0].Code != "" {
-		return fmt.Errorf("RefreshToken failed with code %s, Message %s, Details %s, request body %s",
-			rdtRsp.Errors[0].Code, rdtRsp.Errors[0].Message, rdtRsp.Errors[0].Details, req.Body)
+		return fmt.Errorf("RefreshRestrictedDataToken failed with code: %s, Message: %s, Details: %s, Request Body: %s",
+			rdtRsp.Errors[0].Code, rdtRsp.Errors[0].Message, rdtRsp.Errors[0].Details, string(reqBody))
 	} else {
-		return fmt.Errorf("RestrictedDataTokenResponse failed with unknown reason. Body: %s, request body %s", string(respBodyBytes), req.Body)
+		return fmt.Errorf("RefreshRestrictedDataToken failed with unknown reason. Body: %s, Request Body: %s", string(respBodyBytes), string(reqBody))
 	}
 
 	return nil
