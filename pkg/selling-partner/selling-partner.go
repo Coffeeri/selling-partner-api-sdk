@@ -100,9 +100,16 @@ func NewSellingPartner(cfg *Config) (*SellingPartner, error) {
 	return sp, nil
 }
 
+type RestrictedDataTokenError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Details string `json:"details"`
+}
+
 type RestrictedDataTokenResponse struct {
 	RestrictedDataToken string `json:"restrictedDataToken"`
 	ExpiresIn           int    `json:"expiresIn"`
+	Errors              []RestrictedDataTokenError
 }
 
 type RestrictedDataTokenRequestPath struct {
@@ -151,18 +158,17 @@ func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataToken
 	if rdtRsp.RestrictedDataToken != "" {
 		s.accessToken = rdtRsp.RestrictedDataToken
 		s.accessTokenExpiry = time.Now().UTC().Add(time.Duration(rdtRsp.ExpiresIn) * time.Second) //set expiration time
+	} else if rdtRsp.Errors[0].Code != "" {
+		return fmt.Errorf("RefreshToken failed with code %s, Message %s, Details %s",
+			rdtRsp.Errors[0].Code, rdtRsp.Errors[0].Message, rdtRsp.Errors[0].Details)
 	} else {
-		return errors.New(fmt.Sprintf("RestrictedDataTokenResponse failed with unknown reason. Body: %s", string(respBodyBytes)))
+		return fmt.Errorf("RestrictedDataTokenResponse failed with unknown reason. Body: %s", string(respBodyBytes))
 	}
 
 	return nil
 }
 
 func (s *SellingPartner) RefreshToken() error {
-	//if s.cfg.UseRestrictedDataToken {
-	//	return  s.RefreshRestrictedDataToken()
-	//}
-
 	reqBody, _ := json.Marshal(map[string]string{
 		"grant_type":    "refresh_token",
 		"refresh_token": s.cfg.RefreshToken,
