@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"regexp"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/fond-of-vertigo/logger"
 )
 
 type AccessTokenResponse struct {
@@ -37,6 +39,7 @@ type Config struct {
 	SecretKey              string //AWS IAM User Secret Key
 	Region                 string //AWS Region
 	RoleArn                string //AWS IAM Role ARN
+	Log                    logger.Logger
 }
 
 func (o Config) IsValid() (bool, error) {
@@ -143,12 +146,23 @@ func (s *SellingPartner) RefreshRestrictedDataToken(paths ...RestrictedDataToken
 
 	client := http.Client{}
 
+	reqDump, err := httputil.DumpRequest(req, true)
+	if err != nil {
+		return fmt.Errorf("request could not be dumped %w", err)
+	}
+	s.cfg.Log.Debugf(string(reqDump))
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 
 	defer resp.Body.Close()
+	repsDump, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		return fmt.Errorf("response could not be dumped %w", err)
+	}
+	s.cfg.Log.Debugf(string(repsDump))
 
 	respBodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
